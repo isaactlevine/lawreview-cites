@@ -1,0 +1,15 @@
+Snapshot: 2026-09-30   Since: 2016-01-01   Run time: 68 min
+Cases in scope: 240797   Cases citing a tracked journal: 2923   Citation instances: 6182
+
+Distinct article-case pairs
+Journal                                    SCOTUS  Courts of appeals
+Harvard Law Review                            304               1024
+Yale Law Journal                              232                649
+Columbia Law Review                           147                497
+University of Chicago Law Review              127                351
+Virginia Law Review                           112                307
+NYU Law Review                                 73                315
+Michigan Law Review                            98                274
+Stanford Law Review                            69                251
+University of Pennsylvania Law Review          63                249
+California Law Review                          26                208
