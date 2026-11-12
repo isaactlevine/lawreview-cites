@@ -1,0 +1,23 @@
+name: extract
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [lawrev_cites.py, .github/workflows/extract.yml]
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq lbzip2
+      - name: Probe file formats
+        run: python3 -u lawrev_cites.py --stream --probe --dir "$RUNNER_TEMP/lr"
+      - name: Extract citations
+        run: python3 -u lawrev_cites.py --stream --dir "$RUNNER_TEMP/lr"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results
+          path: ${{ runner.temp }}/lr/out
+          retention-days: 60
