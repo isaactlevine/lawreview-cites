@@ -1,4 +1,4 @@
-Snapshot: 2026-09-30   Since: 2016-01-01   Run time: 68 min
+Snapshot: 2026-09-30   Since: 2016-01-01   Run time: 90 min
 Cases in scope: 240797   Cases citing a tracked journal: 2923   Citation instances: 6182
 
 Distinct article-case pairs
