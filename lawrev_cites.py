@@ -71,9 +71,15 @@ SIGNAL_RE = re.compile(
 SUFFIX_RE = re.compile(r"^(Jr\.|Sr\.|II|III|IV|et al\.),\s?")
 STUDENT_RE = re.compile(r"^(Note|Comment|Recent Case|Recent Cases|Case Comment|Case Note|Recent Development|"
                         r"Developments in the Law|The Supreme Court)\b", re.I)
+_NAME = r"(?:(?:CHIEF |Chief )?(?:JUSTICE|Justice) (?P<n1>[A-Z][A-Za-z'’\-]+)|(?P<n2>[A-Z][A-Za-z'’\-]+), (?:Senior |Chief )?(?:Circuit|District) Judge|(?P<n3>[A-Z][A-Z'’\-]{2,}), (?:C\. ?)?J\.)"
+_TAIL = (r"(?: in part(?: and (?:concurring|dissenting) in (?:part|the judgment|the result))?| in the judgment(?: in part)?"
+         r"| in the result| specially| from (?:the )?denial of [a-z ]{0,40}| in (?:the )?denial of [a-z ]{0,40}| from (?:the )?[a-z ]{0,40})*")
 SECTION_RE = re.compile(
-    r"(?:JUSTICE|Justice|JUDGE|Judge|J\.)\s[^.;:()]{0,120}?\b(concurring|dissenting)\b|"
-    r"\b([A-Z][A-Za-z'’\-]+),\s(?:Circuit|Chief|Senior Circuit)?\s?(?:Judge|Justice|J\.),[^.;()]{0,80}?\b(concurring|dissenting)\b")
+    r"(?<![(\w])" + _NAME + r",(?: with whom[^.:()]{0,200}?,)? (?P<kind>concurring|dissenting)(?P<tail>" + _TAIL + r")"
+    r"(?P<end>[.:])?(?![^()]{0,60}\))")
+LEAD_RE = re.compile(
+    r"(?:(?:CHIEF |Chief )?(?:JUSTICE|Justice) (?P<a>[A-Z][A-Za-z'’\-]+) (?:delivered|announced) the (?:opinion|judgment)"
+    r"|(?P<b>[A-Z][A-Za-z'’\-]+), (?:Senior |Chief )?(?:Circuit|District) Judge[:.]|(?P<c>P(?:ER|er) C(?:URIAM|uriam)))")
 
 
 def clean_text(raw):
@@ -119,25 +125,35 @@ def parse_prefix(prefix):
 
 def extract(text):
     """Yield one dict per full citation in a cleaned opinion text."""
-    sections = [(m.start(), (m.group(1) or m.group(3))) for m in SECTION_RE.finditer(text)]
+    sections = []
+    for m in SECTION_RE.finditer(text):
+        name = m.group("n1") or m.group("n2") or m.group("n3")
+        if m.group("n3") is None and not m.group("end"):
+            continue  # "Justice X, dissenting, argued ..." is prose, not a heading
+        kind = m.group("kind") + (" in part" if "in part" in m.group("tail") else "")
+        sections.append((m.start(), kind, name.title()))
+    lm = LEAD_RE.search(text)
+    lead = ""
+    if lm:
+        lead = (lm.group("a") or lm.group("b") or "Per Curiam").title()
     for m in CITE_RE.finditer(text):
         ji = next(i for i in range(len(JNAMES)) if m.group("j%d" % i))
         paren = m.group("paren") or ""
         years = YEAR_RE.findall(paren)
-        author, title, kind = parse_prefix(text[max(0, m.start() - 400):m.start()])
-        sec = ""
-        for pos, lab in sections:
+        author, title, kind = parse_prefix(text[max(0, m.start() - 450):m.start()])
+        sec, judge = "", lead
+        for pos, lab, nm in sections:
             if pos < m.start():
-                sec = lab
+                sec, judge = lab, nm
             else:
                 break
         yield {
             "journal": JNAMES[ji], "companion": m.group("comp") or "",
             "volume": m.group("vol"), "first_page": m.group("page"),
             "pinpoints": (m.group("pins") or "").strip(", "), "article_year": years[-1] if years else "",
-            "author_raw": author, "title_raw": title, "kind": kind, "section_guess": sec,
+            "author_raw": author, "title_raw": title, "kind": kind, "section_guess": sec or "majority/lead", "writer_guess": judge,
             "char_pos": m.start(), "text_len": len(text),
-            "context": text[max(0, m.start() - 250):m.end() + 120],
+            "context": text[max(0, m.start() - 450):m.end() + 120],
         }
 
 
@@ -374,7 +390,7 @@ def main():
     if not tcols:
         sys.exit("No text columns in opinions file: %s\nSend this message back to Claude." % r.header)
     fields = ["cluster_id", "opinion_id", "court", "date_filed", "case_name", "reporter_cite",
-              "precedential_status", "opinion_type", "opinion_author", "per_curiam", "section_guess",
+              "precedential_status", "opinion_type", "opinion_author", "per_curiam", "section_guess", "writer_guess",
               "journal", "companion", "volume", "first_page", "pinpoints", "article_year",
               "author_raw", "title_raw", "kind", "char_pos", "text_len", "url", "context"]
     fc = open(os.path.join(out, "citations.csv"), "w", newline="", encoding="utf-8")
