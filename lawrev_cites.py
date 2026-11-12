@@ -52,9 +52,14 @@ CITE_RE = re.compile(
     "|".join("(?P<j%d>%s)" % (i, p) for i, p in enumerate(JOURNALS.values())) +
     r")(?:\s?(?P<comp>" + COMPANION + r"))?\s(?P<page>\d{1,5})(?![\d.]*\s?(?:U\.\s?S\.|F\.))"
     r"(?P<pins>(?:,\s?(?:at\s)?\d+(?:\s?[-–—]\s?\d+)?(?:\s?(?:&|and)?\s?n+\.\s?\d+)?)*)"
-    r"(?:\s?\((?P<paren>[^()]{0,80})\))?")
+    r"(?:\s?\((?P<paren>[^()]{0,80})\))?", re.I)
 JNAMES = list(JOURNALS)
-PREFILTER = re.compile(r"(?:Harv|Yale|Stan|Colum|Chi|U|Pa|Va|Mich|Cal|Calif)\.?\s*L\.\s*(?:Rev|J)")
+PREFILTER = re.compile(r"L\.\s*(?:Rev|J)", re.I)
+# any journal whose abbreviation ends in L. Rev. / L.J., for the all-journals comparison
+ANY_RE = re.compile(
+    r"(?<![\w.,])(?P<vol>\d{1,4})\s(?P<j>(?:(?:[A-Z][A-Za-z'\u2019]*\.?|&)\s?){1,6}?"
+    r"(?:L\.\s?Rev\.?|L\.\s?REV\.?|L\.\s?J\.?))\s(?P<page>\d{1,5})(?![\d.]*\s?(?:U\.\s?S\.|F\.))"
+    r"(?:[\d,\s\-\u2013\u2014&n.at]{0,30}\((?P<paren>[^()]{0,80})\))?")
 TAG_RE = re.compile(r"<[^>]{0,2000}>")
 WS_RE = re.compile(r"\s+")
 YEAR_RE = re.compile(r"\b(1[89]\d\d|20\d\d)\b")
@@ -375,6 +380,9 @@ def main():
     fc = open(os.path.join(out, "citations.csv"), "w", newline="", encoding="utf-8")
     w = csv.DictWriter(fc, fieldnames=fields)
     w.writeheader()
+    fa = open(os.path.join(out, "all_journal_cites.csv"), "w", newline="", encoding="utf-8")
+    wa = csv.writer(fa)
+    wa.writerow(["cluster_id", "opinion_id", "court", "date_filed", "precedential_status", "journal_raw", "volume", "first_page", "article_year"])
     citing, scanned, ncite = set(), collections.Counter(), 0
     tally = collections.defaultdict(set)
     for row in r:
@@ -392,7 +400,11 @@ def main():
         if not PREFILTER.search(raw):
             continue
         url = "https://www.courtlistener.com/opinion/%d/%s/" % (k, cl[3] or "x")
-        for hit in extract(clean_text(raw)):
+        text = clean_text(raw)
+        for m in ANY_RE.finditer(text):
+            yrs = YEAR_RE.findall(m.group("paren") or "")
+            wa.writerow([k, row[oi], cl[0], cl[1], cl[4], m.group("j"), m.group("vol"), m.group("page"), yrs[-1] if yrs else ""])
+        for hit in extract(text):
             hit.update(cluster_id=k, opinion_id=row[oi], court=cl[0], date_filed=cl[1], case_name=cl[2],
                        reporter_cite=cl[7], precedential_status=cl[4],
                        opinion_type=row[oty] if oty is not None else "",
@@ -404,6 +416,7 @@ def main():
             art = (hit["journal"], hit["companion"], hit["volume"], hit["first_page"])
             tally[(hit["journal"], "SCOTUS" if cl[0] == "scotus" else "Courts of appeals")].add((k, art))
     fc.close()
+    fa.close()
 
     with open(os.path.join(out, "cases.csv"), "w", newline="", encoding="utf-8") as f:
         cw = csv.writer(f)

@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths: [lawrev_cites.py, .github/workflows/extract.yml]
+permissions:
+  contents: write
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -21,3 +23,11 @@ jobs:
           name: results
           path: ${{ runner.temp }}/lr/out
           retention-days: 60
+      - name: Commit results to the repository
+        if: always()
+        run: |
+          mkdir -p results && cp -r "$RUNNER_TEMP/lr/out/." results/ || true
+          gzip -f results/all_journal_cites.csv || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add results && git commit -m "Results from run $GITHUB_RUN_ID" && git push || true
